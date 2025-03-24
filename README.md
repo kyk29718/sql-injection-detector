@@ -35,7 +35,7 @@ The tool can identify numerous SQL injection vectors, including:
 
 ## 🚀 Getting Started
 
-1. Visit the live demo at [https://your-username.github.io/sql-injection-detector/](https://your-username.github.io/sql-injection-detector/)
+1. Visit the live demo at [https://your-username.github.io/sql-injection-detector/]https://github.com/kyk29718/sql-injection-detector.github.io.git
 2. Or clone this repository and open `index.html` in your browser:
    ```bash
    git clone https://github.com/your-username/sql-injection-detector.git
