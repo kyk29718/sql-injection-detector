@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Injection Detector</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2a3f5f;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+            font-family: monospace;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #4b6bfb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #3a59d9;
+        }
+        .results {
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        .result-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .safe {
+            background-color: #e6ffec;
+            border-left: 4px solid #2da44e;
+        }
+        .warning {
+            background-color: #fff8e6;
+            border-left: 4px solid #f0b429;
+        }
+        .danger {
+            background-color: #ffebe6;
+            border-left: 4px solid #e5484d;
+        }
+        .label {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+        .explanation {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #555;
+        }
+        .sample-queries {
+            margin-top: 30px;
+        }
+        .sample-queries h3 {
+            margin-bottom: 10px;
+        }
+        .query-example {
+            background-color: #f5f7ff;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-family: monospace;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SQL Injection Detector</h1>
+        
+        <div>
+            <label for="sqlQuery">Enter SQL Query to Analyze:</label>
+            <textarea id="sqlQuery" placeholder="Example: SELECT * FROM users WHERE username = 'admin' AND password = 'password'"></textarea>
+            <button id="analyzeBtn">Analyze Query</button>
+        </div>
+
+        <div class="sample-queries">
+            <h3>Sample Queries to Test:</h3>
+            <div class="query-example">SELECT * FROM users WHERE username = 'admin' AND password = 'password'</div>
+            <div class="query-example">SELECT * FROM users WHERE username = 'admin'; DROP TABLE users; --'</div>
+            <div class="query-example">SELECT * FROM products WHERE category = 'Electronics' OR 1=1</div>
+            <div class="query-example">SELECT * FROM users WHERE username = 'admin' UNION SELECT username, password FROM admin_users</div>
+        </div>
+        
+        <div class="results" id="results">
+            <!-- Results will be displayed here -->
+        </div>
+    </div>
+
+    <footer>
+        SQL Injection Detector - Educational Tool
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            const sqlQueryInput = document.getElementById('sqlQuery');
+            const resultsDiv = document.getElementById('results');
+            const queryExamples = document.querySelectorAll('.query-example');
+            
+            // Click on example queries to fill the textarea
+            queryExamples.forEach(example => {
+                example.addEventListener('click', function() {
+                    sqlQueryInput.value = this.textContent;
+                });
+            });
+
+            analyzeBtn.addEventListener('click', function() {
+                const query = sqlQueryInput.value.trim();
+                if (!query) {
+                    resultsDiv.innerHTML = '<div class="result-item warning"><div class="label">Please enter a SQL query to analyze.</div></div>';
+                    return;
+                }
+                
+                analyzeQuery(query);
+            });
+
+            function analyzeQuery(query) {
+                // Clear previous results
+                resultsDiv.innerHTML = '';
+                
+                const issues = [];
+                let riskLevel = 'low';
+                
+                // Check for common SQL injection patterns
+                const patterns = {
+                    multipleSemicolons: {
+                        regex: /;(?=\s*[^\s;])/i,
+                        description: "Multiple SQL statements detected (using semicolons)",
+                        risk: "high"
+                    },
+                    commentOperators: {
+                        regex: /--|\/{2}|\*\/|\/\*/i, 
+                        description: "Comment operators detected",
+                        risk: "high"
+                    },
+                    unionSelect: {
+                        regex: /union\s+all\s+select|union\s+select/i,
+                        description: "UNION SELECT statement detected",
+                        risk: "high"
+                    },
+                    orTrueCondition: {
+                        regex: /\sor\s+[\'\"]?[0-9]+[\'\"]?\s*=\s*[\'\"]?[0-9]+[\'\"]?/i,
+                        description: "OR with always true condition detected",
+                        risk: "high"
+                    },
+                    batchCommands: {
+                        regex: /exec\s+|\sexecute\s+|xp_cmdshell|sp_executesql/i,
+                        description: "Batch commands or stored procedure execution detected",
+                        risk: "high"
+                    },
+                    sleepWaitfor: {
+                        regex: /sleep\s*\(|waitfor\s+delay|pg_sleep/i,
+                        description: "Time-delay functions detected",
+                        risk: "high"
+                    },
+                    dropTable: {
+                        regex: /drop\s+table|alter\s+table|delete\s+from/i,
+                        description: "Table altering/deleting commands detected",
+                        risk: "high"
+                    },
+                    selectAll: {
+                        regex: /select\s+\*/i,
+                        description: "SELECT * detected - consider specifying columns",
+                        risk: "low"
+                    },
+                    quoteNormalization: {
+                        regex: /['"`]\s*\+\s*['"`]|concat\s*\(/i,
+                        description: "String concatenation detected",
+                        risk: "medium"
+                    }
+                };
+                
+                // Check for common SQL injection patterns
+                for (const [key, pattern] of Object.entries(patterns)) {
+                    if (pattern.regex.test(query)) {
+                        issues.push({
+                            description: pattern.description,
+                            risk: pattern.risk
+                        });
+                        
+                        // Update overall risk level
+                        if (pattern.risk === 'high' && riskLevel !== 'high') {
+                            riskLevel = 'high';
+                        } else if (pattern.risk === 'medium' && riskLevel === 'low') {
+                            riskLevel = 'medium';
+                        }
+                    }
+                }
+                
+                // Create results
+                let resultHTML = '';
+                
+                // Add overall risk assessment
+                let riskClass = '';
+                let riskMessage = '';
+                
+                switch(riskLevel) {
+                    case 'high':
+                        riskClass = 'danger';
+                        riskMessage = 'High Risk: Potential SQL injection vulnerability detected!';
+                        break;
+                    case 'medium':
+                        riskClass = 'warning';
+                        riskMessage = 'Medium Risk: Some suspicious patterns detected.';
+                        break;
+                    default:
+                        riskClass = 'safe';
+                        riskMessage = 'Low Risk: No obvious SQL injection patterns detected.';
+                }
+                
+                resultHTML += `
+                    <div class="result-item ${riskClass}">
+                        <div class="label">Risk Assessment: ${riskMessage}</div>
+                    </div>
+                `;
+                
+                // Add detected issues
+                if (issues.length > 0) {
+                    resultHTML += '<div class="result-item"><div class="label">Detected Issues:</div><ul>';
+                    
+                    issues.forEach(issue => {
+                        resultHTML += `<li><strong>${issue.risk === 'high' ? '⚠️ ' : ''}${issue.description}</strong></li>`;
+                    });
+                    
+                    resultHTML += '</ul></div>';
+                    
+                    // Add recommendations
+                    resultHTML += `
+                        <div class="result-item">
+                            <div class="label">Recommendations:</div>
+                            <ul>
+                                <li>Use parameterized queries or prepared statements</li>
+                                <li>Implement input validation</li>
+                                <li>Use an ORM (Object-Relational Mapping) library</li>
+                                <li>Apply least privilege principle to database users</li>
+                            </ul>
+                        </div>
+                    `;
+                }
+                
+                // Add explanation
+                resultHTML += `
+                    <div class="explanation">
+                        <p><strong>Note:</strong> This is a simple detection tool and may not catch all SQL injection vulnerabilities or might show false positives. Always use proper security measures like prepared statements in your production code.</p>
+                    </div>
+                `;
+                
+                resultsDiv.innerHTML = resultHTML;
+            }
+        });
+    </script>
+</body>
+</html>
